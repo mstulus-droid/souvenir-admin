@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Souvenir Inventory System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        gold: { 500: '#d4af37', 600: '#b4941f' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+        
+        /* Gradient Header Biru Cantik ke Navy */
+        .header-gradient { background: linear-gradient(135deg, #3b82f6 0%, #172554 100%); }
+        
+        .input-concave {
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        .input-concave:focus {
+            background-color: #fff;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+            outline: none; border-color: #3b82f6;
+        }
+
+        .btn-primary {
+            background: linear-gradient(to right, #2563eb, #1d4ed8);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        .btn-primary:active { transform: scale(0.98); }
+
+        .card-item {
+            background: white; border-radius: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #f1f5f9;
+            overflow: hidden; /* Penting untuk gambar full height */
+            transition: transform 0.2s;
+        }
+        
+        /* Modal Style */
+        .modal-backdrop {
+            background-color: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(4px);
+        }
+
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        
+        input[type="file"] { display: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col relative overflow-hidden font-sans">
+
+    <!-- ================= HALAMAN UTAMA (LIST) ================= -->
+    <div id="pageHome" class="flex flex-col h-full w-full absolute inset-0 transition-transform duration-300">
+        <!-- HEADER -->
+        <header class="header-gradient text-white pt-6 pb-24 px-6 shadow-lg rounded-b-[2.5rem] relative z-10">
+            <div class="max-w-md mx-auto flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">Stock Souvenir</h1>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span id="connectionStatus" class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                        <p class="text-blue-100 text-xs font-light" id="connectionText">Menghubungkan...</p>
+                    </div>
+                </div>
+                <!-- Tombol Tambah Barang -->
+                <button onclick="openAddForm()" class="bg-white/10 p-3 rounded-full backdrop-blur-md border border-white/20 active:scale-95 transition-all shadow-xl hover:bg-white/20">
+                    <i class="fas fa-plus text-lg text-white"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- SEARCH & FILTER & SORT -->
+        <div class="px-5 -mt-16 relative z-20 max-w-md mx-auto w-full">
+            <div class="bg-white p-4 rounded-2xl shadow-xl border border-slate-100 space-y-4">
+                <!-- Search & Sort Row -->
+                <div class="flex gap-2">
+                    <div class="relative flex-1">
+                        <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="searchInput" placeholder="Cari souvenir..." class="input-concave w-full pl-10 pr-3 py-2.5 rounded-xl text-sm font-medium">
+                    </div>
+                    <!-- Sort Button -->
+                    <div class="relative">
+                        <select id="sortSelect" onchange="handleSort()" class="appearance-none bg-slate-50 border border-slate-200 text-slate-600 py-2.5 pl-3 pr-8 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="name_asc">Nama (A-Z)</option>
+                            <option value="price_asc">Harga (Termurah)</option>
+                            <option value="price_desc">Harga (Termahal)</option>
+                            <option value="qty_asc">Stok (Sedikit)</option>
+                            <option value="qty_desc">Stok (Banyak)</option>
+                            <option value="vendor_asc">Vendor (A-Z)</option>
+                        </select>
+                        <i class="fas fa-sort absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none text-xs"></i>
+                    </div>
+                </div>
+
+                <!-- Filter Kelas (A-F) -->
+                <div class="flex justify-between items-center gap-2 overflow-x-auto pb-1 no-scrollbar" id="categoryFilterContainer">
+                    <button onclick="filterCategory('all')" class="cat-btn bg-slate-800 text-white flex-none w-14 py-2 rounded-lg text-xs font-bold shadow-md transition-all">Semua</button>
+                    <!-- Generated via JS: A, B, C... -->
+                </div>
+            </div>
+        </div>
+
+        <!-- LIST BARANG -->
+        <main class="flex-1 px-5 pt-4 pb-20 max-w-md mx-auto w-full overflow-y-auto no-scrollbar flex flex-col">
+            <div id="loadingState" class="text-center py-20 hidden">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800 mx-auto mb-4"></div>
+                <p class="text-xs text-slate-400 font-medium">Memuat data...</p>
+            </div>
+            
+            <div id="emptyState" class="text-center py-20 hidden">
+                <i class="fas fa-box-open text-4xl text-slate-200 mb-3"></i>
+                <p class="text-slate-400 text-sm">Data tidak ditemukan</p>
+            </div>
+
+            <div id="itemsContainer" class="grid gap-4 pb-6">
+                <!-- Items Rendered Here -->
+            </div>
+
+            <!-- Footer -->
+            <footer class="mt-auto pt-8 pb-6 text-center">
+                <p class="text-slate-300 text-[10px] font-bold tracking-[0.2em] uppercase">BizDev X GA</p>
+            </footer>
+        </main>
+    </div>
+
+    <!-- ================= HALAMAN FORM (TAMBAH/EDIT DATA) ================= -->
+    <div id="pageForm" class="fixed inset-0 bg-white z-50 transform translate-x-full transition-transform duration-300 flex flex-col h-screen">
+        <div class="header-gradient p-6 pb-6 shadow-lg flex items-center gap-4 text-white">
+            <button onclick="switchPage('home')" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-sm active:scale-90 transition-transform hover:bg-white/20">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <div>
+                <h2 class="text-lg font-bold" id="formTitle">Input Souvenir</h2>
+                <p class="text-xs text-blue-100 font-light" id="formSubtitle">Isi detail barang baru</p>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 max-w-md mx-auto w-full pb-20">
+            <form id="addItemForm" onsubmit="handleFormSubmit(event)" class="space-y-5">
+                <input type="hidden" name="action_type" id="actionType" value="add">
+                <input type="hidden" name="item_id" id="itemId" value="">
+
+                <!-- Upload Foto -->
+                <div class="flex justify-center mb-2">
+                    <div class="relative group w-full">
+                        <div id="previewContainer" class="w-full h-48 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center overflow-hidden transition-colors hover:border-blue-400">
+                            <i class="fas fa-camera text-slate-300 text-3xl mb-2"></i>
+                            <p class="text-xs text-slate-400">Ambil Foto Souvenir</p>
+                            <img id="imgPreview" class="w-full h-full object-cover hidden absolute inset-0">
+                        </div>
+                        <label for="cameraInput" class="absolute bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg btn-primary cursor-pointer hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-camera text-lg"></i>
+                        </label>
+                        <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="processImage(this)">
+                    </div>
+                </div>
+
+                <!-- Pilihan Kelas (Penting untuk Generate ID) -->
+                <div>
+                    <label class="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wide">Kelas Harga (A-F)</label>
+                    <div class="grid grid-cols-6 gap-2 mt-1">
+                        <!-- Radio Button Custom Style -->
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="A" class="peer sr-only" required onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">A</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="B" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">B</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="C" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">C</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="D" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">D</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="E" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">E</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kategori" value="F" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="w-full py-3 rounded-lg border border-slate-200 text-center text-sm font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-800 transition-all">F</div>
+                        </label>
+                    </div>
+                    <p class="text-[10px] text-blue-600 mt-2 text-right font-mono" id="idPreviewText">ID Baru: (Pilih Kelas)</p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Nama Souvenir</label>
+                        <input type="text" name="nama" id="inputNama" required class="input-concave w-full px-4 py-3 rounded-xl text-sm font-semibold text-slate-800" placeholder="Contoh: Tumbler Premium">
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Satuan</label>
+                            <!-- REVISI: Opsi Klik (Chips) Pcs/Set/Box/Unit -->
+                            <div class="grid grid-cols-4 gap-2 mt-1">
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="satuan" value="Pcs" class="peer sr-only" required checked>
+                                    <div class="py-2.5 rounded-lg border border-slate-200 text-center text-xs font-bold text-slate-500 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 transition-all">Pcs</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="satuan" value="Set" class="peer sr-only">
+                                    <div class="py-2.5 rounded-lg border border-slate-200 text-center text-xs font-bold text-slate-500 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 transition-all">Set</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="satuan" value="Box" class="peer sr-only">
+                                    <div class="py-2.5 rounded-lg border border-slate-200 text-center text-xs font-bold text-slate-500 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 transition-all">Box</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="satuan" value="Unit" class="peer sr-only">
+                                    <div class="py-2.5 rounded-lg border border-slate-200 text-center text-xs font-bold text-slate-500 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 transition-all">Unit</div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Vendor</label>
+                        <input type="text" name="vendor" id="inputVendor" class="input-concave w-full px-4 py-3 rounded-xl text-sm" placeholder="Nama PT/CV">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Harga (Rp)</label>
+                            <input type="text" name="harga_display" id="inputHarga" required class="input-concave w-full px-4 py-3 rounded-xl text-sm font-medium" placeholder="0" inputmode="numeric">
+                            <input type="hidden" name="harga" id="realHarga">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Stok Awal</label>
+                            <input type="number" name="stok" id="inputStok" required class="input-concave w-full px-4 py-3 rounded-xl text-sm font-bold text-blue-800 bg-blue-50" placeholder="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4">
+                    <button type="submit" id="btnSave" class="btn-primary w-full text-white py-4 rounded-xl font-bold shadow-lg flex justify-center items-center gap-2 hover:opacity-90 transition-opacity">
+                        <span id="btnSaveText">Simpan Data</span>
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL UPDATE STOK ================= -->
+    <div id="stockModal" class="fixed inset-0 z-[60] hidden flex items-end sm:items-center justify-center">
+        <div class="absolute inset-0 modal-backdrop transition-opacity" onclick="closeModal()"></div>
+        <div class="bg-white w-full max-w-sm mx-auto rounded-t-[2rem] sm:rounded-[2rem] p-6 animate-slide-up relative z-10 shadow-2xl">
+            <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+            
+            <div class="text-center mb-6">
+                <span id="modalBadge" class="px-3 py-1 rounded-full text-[10px] uppercase font-bold bg-slate-100 text-slate-500 mb-2 inline-block">Update</span>
+                <h3 id="modalItemName" class="text-xl font-bold text-slate-800 leading-tight">Nama Barang</h3>
+                <p class="text-sm font-mono text-slate-400 mt-1" id="modalItemId">ID: -</p>
+            </div>
+
+            <div class="flex items-center justify-center gap-4 mb-8">
+                <button onclick="adjustInput(-1)" class="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 active:scale-90 transition-all text-xl">
+                    <i class="fas fa-minus"></i>
+                </button>
+                 <input type="number" id="modalInputQty" class="input-concave w-24 text-center text-4xl font-bold py-2 rounded-xl text-slate-800 bg-transparent border-none focus:ring-0 p-0" placeholder="0" value="1">
+                 <button onclick="adjustInput(1)" class="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 active:scale-90 transition-all text-xl">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="closeModal()" class="py-3.5 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition-colors">Batal</button>
+                <button id="btnConfirmStock" class="btn-primary py-3.5 rounded-xl text-white font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                    <span>Konfirmasi</span>
+                </button>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-slate-100 text-center">
+                <button onclick="confirmDelete()" class="text-xs text-red-400 font-medium hover:text-red-600 flex items-center justify-center gap-1 mx-auto py-2">
+                    <i class="fas fa-trash"></i> Hapus Barang Ini
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-6 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 transition-all duration-300 opacity-0 -translate-y-10 z-[70] min-w-[200px] justify-center">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span id="toastMsg" class="text-sm font-medium">Berhasil</span>
+    </div>
+
+    <script>
+        // ==========================================
+        // KONFIGURASI
+        // ==========================================
+        let API_URL = "https://script.google.com/macros/s/AKfycbxSyJO1LCc1SvbwsNCcdVkVCXHPkDyxQHLxEp0UrwjDW4-K-74o7yJ72fkmsaJMEJvaFQ/exec"; 
+
+        // State
+        let inventoryData = [];
+        let currentFilter = 'all';
+        let currentCompressedImage = "";
+        let selectedItemId = null;
+        let updateMode = null;
+        let isDemoMode = false;
+        let nextIDPreview = ""; 
+
+        // Definisi Warna untuk Setiap Kelas
+        const CLASS_COLORS = {
+            'A': { bg: 'bg-rose-50', text: 'text-rose-600', badge: 'bg-rose-100 text-rose-700', active: 'bg-rose-600 text-white border-rose-600' },
+            'B': { bg: 'bg-orange-50', text: 'text-orange-600', badge: 'bg-orange-100 text-orange-700', active: 'bg-orange-500 text-white border-orange-500' },
+            'C': { bg: 'bg-amber-50', text: 'text-amber-600', badge: 'bg-amber-100 text-amber-700', active: 'bg-amber-500 text-white border-amber-500' },
+            'D': { bg: 'bg-emerald-50', text: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700', active: 'bg-emerald-600 text-white border-emerald-600' },
+            'E': { bg: 'bg-cyan-50', text: 'text-cyan-600', badge: 'bg-cyan-100 text-cyan-700', active: 'bg-cyan-600 text-white border-cyan-600' },
+            'F': { bg: 'bg-violet-50', text: 'text-violet-600', badge: 'bg-violet-100 text-violet-700', active: 'bg-violet-600 text-white border-violet-600' }
+        };
+
+        const DUMMY_DATA = [
+            { id: 'A-01', nama: 'Tumbler Stainless Premium', kategori: 'A', stok: 50, satuan: 'Pcs', vendor: 'SouvenirIndo', harga: 85000, foto: '' },
+            { id: 'C-01', nama: 'Notes Kulit A5', kategori: 'C', stok: 100, satuan: 'Pcs', vendor: 'Percetakan Jaya', harga: 25000, foto: '' },
+            { id: 'B-01', nama: 'Payung Lipat 3', kategori: 'B', stok: 30, satuan: 'Pcs', vendor: 'Grosir Payung', harga: 45000, foto: '' }
+        ];
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!API_URL || API_URL.includes("script.google.com") === false) {
+                enableDemoMode();
+            }
+            renderFilterButtons();
+            fetchData();
+            
+            const inputHarga = document.getElementById('inputHarga');
+            inputHarga.addEventListener('keyup', function(e) {
+                let val = this.value.replace(/\D/g, '');
+                document.getElementById('realHarga').value = val;
+                this.value = val ? new Intl.NumberFormat('id-ID').format(val) : '';
+            });
+        });
+
+        function enableDemoMode() {
+            isDemoMode = true;
+            document.getElementById('connectionStatus').classList.replace('bg-green-400', 'bg-amber-400');
+            document.getElementById('connectionStatus').classList.remove('animate-pulse');
+            document.getElementById('connectionText').innerText = "Demo (Offline)";
+        }
+
+        function updateLastSeen() {
+            if (!isDemoMode) {
+                const now = new Date();
+                const options = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                const timeStr = now.toLocaleDateString('id-ID', options).replace('.', ':');
+                document.getElementById('connectionText').innerText = `Update: ${timeStr}`;
+                document.getElementById('connectionStatus').classList.remove('animate-pulse');
+            }
+        }
+
+        function renderFilterButtons() {
+            const container = document.getElementById('categoryFilterContainer');
+            container.innerHTML = '';
+            
+            // Tombol Semua
+            const btnAll = document.createElement('button');
+            btnAll.textContent = 'Semua';
+            btnAll.onclick = () => filterCategory('all');
+            if(currentFilter === 'all') {
+                btnAll.className = 'cat-btn flex-none w-16 py-2 rounded-lg text-xs font-bold shadow-md transition-all bg-slate-800 text-white';
+            } else {
+                btnAll.className = 'cat-btn flex-none w-16 py-2 rounded-lg text-xs font-bold border border-slate-200 text-slate-500 bg-white';
+            }
+            container.appendChild(btnAll);
+
+            const classes = ['A', 'B', 'C', 'D', 'E', 'F'];
+            classes.forEach(c => {
+                const colors = CLASS_COLORS[c];
+                const btn = document.createElement('button');
+                btn.innerText = c;
+                btn.onclick = () => filterCategory(c);
+                
+                if(currentFilter === c) {
+                    btn.className = `cat-btn flex-none w-10 py-2 rounded-lg text-xs font-bold shadow-md transition-all ${colors.active}`;
+                } else {
+                    btn.className = `cat-btn flex-none w-10 py-2 rounded-lg text-xs font-bold border border-slate-200 bg-white ${colors.text}`;
+                }
+                
+                container.appendChild(btn);
+            });
+        }
+
+        // === FETCH DATA ===
+        async function fetchData() {
+            const loading = document.getElementById('loadingState');
+            const container = document.getElementById('itemsContainer');
+            const empty = document.getElementById('emptyState');
+            
+            loading.classList.remove('hidden');
+            container.innerHTML = '';
+            empty.classList.add('hidden');
+
+            try {
+                let data = [];
+                if (isDemoMode) {
+                    await new Promise(r => setTimeout(r, 500));
+                    const local = localStorage.getItem('souvenir_inventory');
+                    data = local ? JSON.parse(local) : DUMMY_DATA;
+                    if(!local) localStorage.setItem('souvenir_inventory', JSON.stringify(data));
+                } else {
+                    const res = await fetch(API_URL);
+                    const json = await res.json();
+                    if (json.status === 'success') data = json.data;
+                    updateLastSeen();
+                }
+                inventoryData = data;
+                handleSort(); 
+            } catch (err) {
+                console.error(err);
+                if (!isDemoMode) { enableDemoMode(); fetchData(); }
+            } finally {
+                loading.classList.add('hidden');
+                if (inventoryData.length === 0) empty.classList.remove('hidden');
+            }
+        }
+
+        // === RENDER & LOGIC ===
+        function handleSort() {
+            const sortVal = document.getElementById('sortSelect').value;
+            let sorted = [...inventoryData];
+
+            switch(sortVal) {
+                case 'name_asc': sorted.sort((a,b) => a.nama.localeCompare(b.nama)); break;
+                case 'price_asc': sorted.sort((a,b) => a.harga - b.harga); break;
+                case 'price_desc': sorted.sort((a,b) => b.harga - a.harga); break;
+                case 'qty_asc': sorted.sort((a,b) => a.stok - b.stok); break;
+                case 'qty_desc': sorted.sort((a,b) => b.stok - a.stok); break;
+                case 'vendor_asc': sorted.sort((a,b) => (a.vendor||'').localeCompare(b.vendor||'')); break;
+            }
+            renderItems(sorted);
+        }
+
+        function renderItems(dataToRender = null) {
+            const container = document.getElementById('itemsContainer');
+            container.innerHTML = '';
+            const source = dataToRender || inventoryData;
+            
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = source.filter(item => {
+                const matchTerm = item.nama.toLowerCase().includes(term) || (item.vendor||'').toLowerCase().includes(term);
+                const matchCat = currentFilter === 'all' || item.kategori === currentFilter;
+                return matchTerm && matchCat;
+            });
+
+            if(filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs">Tidak ditemukan</div>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const harga = new Intl.NumberFormat('id-ID').format(item.harga);
+                const colors = CLASS_COLORS[item.kategori] || { badge: 'bg-slate-100 text-slate-700' };
+
+                let imgEl = `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><i class="fas fa-image text-2xl"></i></div>`;
+                if(item.foto && item.foto.length > 20) {
+                    imgEl = `<img src="${item.foto}" class="w-full h-full object-cover">`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'card-item flex h-32 relative group'; 
+                card.innerHTML = `
+                    <div class="absolute top-0 right-0 z-20 flex flex-col">
+                        <!-- Tombol Edit -->
+                        <button onclick="openEditForm('${item.id}')" class="bg-slate-100/90 text-slate-400 p-2 rounded-bl-xl hover:bg-blue-50 hover:text-blue-500 transition-colors mb-[1px]">
+                            <i class="fas fa-pen text-xs"></i>
+                        </button>
+                        <!-- Tombol Delete -->
+                        <button onclick="openDeleteConfirm('${item.id}')" class="bg-slate-100/90 text-slate-400 p-2 rounded-bl-xl hover:bg-red-50 hover:text-red-500 transition-colors">
+                            <i class="fas fa-trash text-xs"></i>
+                        </button>
+                    </div>
+
+                    <!-- Kiri: Foto Besar (35% lebar) -->
+                    <div class="w-[35%] h-full bg-slate-50 border-r border-slate-100 relative group cursor-pointer" onclick="viewImage('${item.foto}')">
+                        ${imgEl}
+                    </div>
+                    
+                    <!-- Kanan: Detail (65% lebar) -->
+                    <div class="flex-1 p-3 flex flex-col justify-between relative">
+                        <!-- Header Kanan: Kelas & ID -->
+                        <div class="flex justify-between items-start pr-8">
+                            <div class="min-w-0">
+                                <h3 class="font-bold text-slate-800 text-sm leading-tight line-clamp-2">${item.nama}</h3>
+                                <p class="text-[10px] text-slate-500 mt-0.5 truncate"><i class="fas fa-store mr-1"></i>${item.vendor || '-'}</p>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5 flex-none pl-1">
+                                <span class="${colors.badge} text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">KLS ${item.kategori}</span>
+                                <span class="text-[10px] font-mono text-slate-400">${item.id}</span>
+                            </div>
+                        </div>
+
+                        <!-- Footer Kanan: Stok & Harga (Swapped) -->
+                        <div class="flex items-end justify-between mt-auto pt-2">
+                            <!-- KIRI: STOK (Dominant) -->
+                            <div class="flex flex-col">
+                                <div class="text-[9px] text-slate-400 mb-0.5 font-medium uppercase tracking-wide">Stok Gudang</div>
+                                <div class="flex items-center gap-2">
+                                     <button onclick="openStockModal('${item.id}', 'subtract')" class="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center active:bg-slate-200 active:scale-90 transition-all">
+                                        <i class="fas fa-minus text-[10px]"></i>
+                                    </button>
+                                    <span class="font-bold text-slate-800 text-xl min-w-[1.5rem] text-center">${item.stok}</span>
+                                    <button onclick="openStockModal('${item.id}', 'add')" class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center active:bg-blue-100 active:scale-90 transition-all">
+                                        <i class="fas fa-plus text-[10px]"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- KANAN: HARGA (Secondary) -->
+                            <div class="text-right pb-1">
+                                <div class="text-[9px] text-slate-400">Harga/${item.satuan}</div>
+                                <div class="text-xs font-semibold text-slate-600">Rp ${harga}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // === FILTER CATEGORY ===
+        function filterCategory(cat) {
+            currentFilter = cat;
+            renderFilterButtons();
+            handleSort();
+        }
+
+        document.getElementById('searchInput').addEventListener('input', handleSort);
+
+        // === ID GENERATION LOGIC ===
+        function generatePreviewID() {
+            const classVal = document.querySelector('input[name="kategori"]:checked')?.value;
+            if(!classVal) return;
+
+            // Only generate ID if adding new item
+            if (document.getElementById('actionType').value === 'edit') {
+                const currentId = document.getElementById('itemId').value;
+                document.getElementById('idPreviewText').innerText = `ID: ${currentId} (Tetap)`;
+                return currentId;
+            }
+
+            const itemsInClass = inventoryData.filter(i => i.kategori === classVal);
+            let maxNum = 0;
+            
+            itemsInClass.forEach(item => {
+                const parts = item.id.split('-');
+                if(parts.length === 2) {
+                    const num = parseInt(parts[1]);
+                    if(!isNaN(num) && num > maxNum) maxNum = num;
+                }
+            });
+
+            const nextNum = maxNum + 1;
+            const numStr = nextNum < 10 ? '0' + nextNum : nextNum;
+            const newID = `${classVal}-${numStr}`;
+            
+            document.getElementById('idPreviewText').innerText = `ID Baru: ${newID}`;
+            nextIDPreview = newID;
+            return newID;
+        }
+
+        function handleClassChange() {
+            generatePreviewID();
+        }
+
+        // === FORM HANDLING (ADD & EDIT) ===
+        function openAddForm() {
+            document.getElementById('formTitle').innerText = 'Input Souvenir';
+            document.getElementById('formSubtitle').innerText = 'Isi detail barang baru';
+            document.getElementById('btnSaveText').innerText = 'Simpan Data';
+            document.getElementById('actionType').value = 'add';
+            document.getElementById('itemId').value = '';
+            
+            // Reset Form
+            document.getElementById('addItemForm').reset();
+            document.getElementById('imgPreview').classList.add('hidden');
+            currentCompressedImage = "";
+            
+            // Default select
+            document.querySelector('input[name="kategori"][value="A"]').checked = true;
+            generatePreviewID();
+            
+            switchPage('form');
+        }
+
+        function openEditForm(id) {
+            const item = inventoryData.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('formTitle').innerText = 'Edit Souvenir';
+            document.getElementById('formSubtitle').innerText = 'Ubah detail barang';
+            document.getElementById('btnSaveText').innerText = 'Simpan Perubahan';
+            document.getElementById('actionType').value = 'edit';
+            document.getElementById('itemId').value = id;
+
+            // Fill Data
+            document.getElementById('inputNama').value = item.nama;
+            document.getElementById('inputVendor').value = item.vendor;
+            document.getElementById('inputStok').value = item.stok;
+            
+            // Fill Harga
+            document.getElementById('realHarga').value = item.harga;
+            document.getElementById('inputHarga').value = new Intl.NumberFormat('id-ID').format(item.harga);
+
+            // Select Radio Buttons
+            const catRadio = document.querySelector(`input[name="kategori"][value="${item.kategori}"]`);
+            if (catRadio) catRadio.checked = true;
+            
+            const satRadio = document.querySelector(`input[name="satuan"][value="${item.satuan}"]`);
+            if (satRadio) satRadio.checked = true;
+
+            // Handle Image
+            currentCompressedImage = item.foto;
+            const preview = document.getElementById('imgPreview');
+            if (item.foto && item.foto.length > 20) {
+                preview.src = item.foto;
+                preview.classList.remove('hidden');
+            } else {
+                preview.classList.add('hidden');
+            }
+
+            document.getElementById('idPreviewText').innerText = `ID: ${id} (Tetap)`;
+            
+            switchPage('form');
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const btn = document.getElementById('btnSave');
+            const actionType = document.getElementById('actionType').value;
+            
+            const rawPrice = document.getElementById('realHarga').value;
+            const satuanChecked = document.querySelector('input[name="satuan"]:checked');
+            const kategoriChecked = document.querySelector('input[name="kategori"]:checked');
+
+            btn.disabled = true;
+            btn.innerHTML = 'Memproses...';
+
+            let id = document.getElementById('itemId').value;
+            if (actionType === 'add') {
+                id = generatePreviewID();
+            }
+
+            const itemPayload = {
+                id: id,
+                nama: form.nama.value,
+                kategori: kategoriChecked.value,
+                satuan: satuanChecked ? satuanChecked.value : 'Pcs',
+                vendor: form.vendor.value || '-',
+                harga: parseInt(rawPrice) || 0,
+                stok: parseInt(form.stok.value) || 0,
+                foto: currentCompressedImage
+            };
+
+            const backendAction = actionType === 'edit' ? 'editItem' : 'addItem';
+
+            if (isDemoMode) {
+                if (actionType === 'add') {
+                    // Cek duplikat ID (Demo only)
+                    const exists = inventoryData.find(i => i.id === itemPayload.id);
+                    if(exists) {
+                        const parts = itemPayload.id.split('-');
+                        const newNum = parseInt(parts[1]) + 1;
+                        itemPayload.id = `${parts[0]}-${newNum < 10 ? '0'+newNum : newNum}`;
+                    }
+                    inventoryData.push(itemPayload);
+                } else {
+                    // Edit
+                    const idx = inventoryData.findIndex(i => i.id === id);
+                    if (idx !== -1) inventoryData[idx] = itemPayload;
+                }
+                
+                localStorage.setItem('souvenir_inventory', JSON.stringify(inventoryData));
+                finishSubmit(actionType);
+            } else {
+                try {
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ ...itemPayload, action: backendAction })
+                    });
+
+                    // --- UPDATE LOKAL LANGSUNG (Agar UI langsung berubah) ---
+                    if (actionType === 'add') {
+                        inventoryData.push(itemPayload);
+                    } else {
+                        const idx = inventoryData.findIndex(i => i.id === itemPayload.id);
+                        if (idx !== -1) inventoryData[idx] = itemPayload;
+                    }
+                    // --------------------------------------------------------
+
+                    finishSubmit(actionType);
+                } catch(e) {
+                    alert('Gagal simpan online');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span id="btnSaveText">${actionType === 'add' ? 'Simpan Data' : 'Simpan Perubahan'}</span><i class="fas fa-check"></i>`;
+                }
+            }
+
+            function finishSubmit(type) {
+                showToast(type === 'add' ? `Berhasil! ID: ${itemPayload.id}` : 'Data diperbarui');
+                switchPage('home');
+                handleSort(); // Update Tampilan Segera
+                fetchData(); // Sync Background
+                btn.disabled = false;
+                btn.innerHTML = `<span id="btnSaveText">${type === 'add' ? 'Simpan Data' : 'Simpan Perubahan'}</span><i class="fas fa-check"></i>`;
+            }
+        }
+
+        // === IMAGE COMPRESSION ===
+        function processImage(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const MAX_SIZE = 500; 
+                        
+                        if (width > height) {
+                            if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                        } else {
+                            if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                        }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        currentCompressedImage = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        const preview = document.getElementById('imgPreview');
+                        preview.src = currentCompressedImage;
+                        preview.classList.remove('hidden');
+                    }
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // === STOCK MODAL & UTILS ===
+        function switchPage(p) {
+            const form = document.getElementById('pageForm');
+            if(p === 'form') form.classList.remove('translate-x-full');
+            else form.classList.add('translate-x-full');
+        }
+        
+        function openDeleteConfirm(id) {
+             selectedItemId = id;
+             confirmDelete();
+        }
+
+        function openStockModal(id, mode) {
+            selectedItemId = id;
+            updateMode = mode;
+            const item = inventoryData.find(i => i.id === id);
+            
+            document.getElementById('modalBadge').className = mode === 'add' 
+                ? 'px-3 py-1 rounded-full text-[10px] uppercase font-bold bg-blue-100 text-blue-700 mb-2 inline-block' 
+                : 'px-3 py-1 rounded-full text-[10px] uppercase font-bold bg-red-100 text-red-700 mb-2 inline-block';
+            document.getElementById('modalBadge').innerText = mode === 'add' ? 'Barang Masuk' : 'Barang Keluar';
+            document.getElementById('modalItemName').innerText = item.nama;
+            document.getElementById('modalItemId').innerText = `ID: ${item.id} | Stok: ${item.stok}`;
+            document.getElementById('modalInputQty').value = 1;
+            
+            const btn = document.getElementById('btnConfirmStock');
+            btn.className = mode === 'add' 
+                ? 'btn-primary py-3.5 rounded-xl text-white font-bold shadow-lg w-full bg-blue-600'
+                : 'btn-primary py-3.5 rounded-xl text-white font-bold shadow-lg w-full bg-red-600';
+            btn.style.background = mode === 'add' ? '' : '#dc2626'; 
+            
+            document.getElementById('stockModal').classList.remove('hidden');
+        }
+
+        function adjustInput(v) {
+            const el = document.getElementById('modalInputQty');
+            let val = parseInt(el.value) || 0;
+            if(val + v > 0) el.value = val + v;
+        }
+        function closeModal() { document.getElementById('stockModal').classList.add('hidden'); }
+
+        document.getElementById('btnConfirmStock').addEventListener('click', async () => {
+            const qty = parseInt(document.getElementById('modalInputQty').value);
+            if(!qty) return;
+            const change = updateMode === 'add' ? qty : -qty;
+            const item = inventoryData.find(i => i.id === selectedItemId);
+            
+            if(item.stok + change < 0) { alert('Stok tidak cukup'); return; }
+
+            // Optimistic Update
+            item.stok += change;
+            handleSort(); 
+            closeModal();
+            showToast('Stok diperbarui');
+
+            if(isDemoMode) {
+                localStorage.setItem('souvenir_inventory', JSON.stringify(inventoryData));
+            } else {
+                fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'updateStock', id: selectedItemId, change })
+                });
+            }
+        });
+
+        async function confirmDelete() {
+            if(!confirm('Yakin ingin menghapus souvenir ini?')) return;
+            if(isDemoMode) {
+                inventoryData = inventoryData.filter(i => i.id !== selectedItemId);
+                localStorage.setItem('souvenir_inventory', JSON.stringify(inventoryData));
+            } else {
+                const oldData = [...inventoryData];
+                inventoryData = inventoryData.filter(i => i.id !== selectedItemId);
+                handleSort();
+                
+                try {
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ action: 'deleteItem', id: selectedItemId })
+                    });
+                } catch(e) {
+                   inventoryData = oldData;
+                   handleSort();
+                   alert("Gagal hapus di server");
+                   return;
+                }
+            }
+            closeModal();
+            handleSort();
+            showToast('Item berhasil dihapus');
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            t.classList.remove('opacity-0', '-translate-y-10');
+            setTimeout(() => t.classList.add('opacity-0', '-translate-y-10'), 2500);
+        }
+    </script>
+</body>
+</html>
